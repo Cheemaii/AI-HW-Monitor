@@ -346,10 +346,93 @@
     margin-top: 8px;
   }
 
+  /* ── HERO STATS ── */
+  .hero-grid {
+    display: grid;
+    grid-template-columns: repeat(5, 1fr);
+    gap: 14px;
+    margin-bottom: 36px;
+  }
+  .hero-card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 14px;
+    padding: 22px 20px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.2s, transform 0.15s;
+  }
+  .hero-card:hover { transform: translateY(-2px); border-color: var(--border2); }
+  .hero-card::after {
+    content: '';
+    position: absolute;
+    bottom: 0; left: 0; right: 0;
+    height: 3px;
+    background: var(--hc, var(--accent));
+    opacity: 0.5;
+  }
+  .hero-glow {
+    position: absolute;
+    top: -20px; right: -20px;
+    width: 80px; height: 80px;
+    border-radius: 50%;
+    background: var(--hc, var(--accent));
+    opacity: 0.04;
+    filter: blur(20px);
+  }
+  .hero-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.12em;
+    text-transform: uppercase;
+    color: var(--muted);
+    margin-bottom: 12px;
+  }
+  .hero-value {
+    font-family: var(--font-mono);
+    font-size: 42px;
+    font-weight: 600;
+    line-height: 1;
+    color: var(--hc, var(--accent));
+    transition: color 0.3s;
+    letter-spacing: -1px;
+  }
+  .hero-value.warn { color: var(--warn) !important; }
+  .hero-value.danger { color: var(--danger) !important; }
+  .hero-unit {
+    font-family: var(--font-mono);
+    font-size: 14px;
+    color: var(--muted);
+    margin-left: 4px;
+  }
+  .hero-sub {
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    margin-top: 8px;
+  }
+  .hero-bar-wrap {
+    margin-top: 14px;
+    height: 3px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .hero-bar {
+    height: 100%;
+    border-radius: 99px;
+    background: var(--hc, var(--accent));
+    transition: width 0.6s ease;
+    opacity: 0.6;
+  }
+
+  @media (max-width: 900px) { .hero-grid { grid-template-columns: repeat(3, 1fr); } }
   @media (max-width: 600px) {
     .steps { grid-template-columns: 1fr; }
     .token-form { flex-direction: column; }
     .cards-grid { grid-template-columns: 1fr 1fr; }
+    .hero-grid { grid-template-columns: 1fr 1fr; }
   }
 </style>
 </head>
@@ -417,6 +500,43 @@
       <div style="display:flex;gap:10px;align-items:center;">
         <div class="last-update" id="last-update">—</div>
         <button class="btn-ghost" onclick="disconnect()">← Back</button>
+      </div>
+    </div>
+
+    <!-- HERO STAT CARDS -->
+    <div class="hero-grid" id="hero-grid">
+      <div class="hero-card" id="hero-cpu-temp" style="--hc:#4fffb0">
+        <div class="hero-glow"></div>
+        <div class="hero-label">CPU Temp</div>
+        <div><span class="hero-value" id="hv-cpu-temp">—</span><span class="hero-unit">°C</span></div>
+        <div class="hero-sub" id="hs-cpu-temp">waiting...</div>
+        <div class="hero-bar-wrap"><div class="hero-bar" id="hb-cpu-temp" style="width:0%"></div></div>
+      </div>
+      <div class="hero-card" id="hero-gpu-temp" style="--hc:#00c8ff">
+        <div class="hero-glow"></div>
+        <div class="hero-label">GPU Temp</div>
+        <div><span class="hero-value" id="hv-gpu-temp">—</span><span class="hero-unit">°C</span></div>
+        <div class="hero-sub" id="hs-gpu-temp">waiting...</div>
+        <div class="hero-bar-wrap"><div class="hero-bar" id="hb-gpu-temp" style="width:0%"></div></div>
+      </div>
+      <div class="hero-card" id="hero-power" style="--hc:#ffd84d">
+        <div class="hero-glow"></div>
+        <div class="hero-label">System Power</div>
+        <div><span class="hero-value" id="hv-power">—</span><span class="hero-unit">W</span></div>
+        <div class="hero-sub" id="hs-power">waiting...</div>
+      </div>
+      <div class="hero-card" id="hero-fan" style="--hc:#4dd9ff">
+        <div class="hero-glow"></div>
+        <div class="hero-label">Top Fan</div>
+        <div><span class="hero-value" id="hv-fan">—</span><span class="hero-unit">RPM</span></div>
+        <div class="hero-sub" id="hs-fan">waiting...</div>
+      </div>
+      <div class="hero-card" id="hero-ram" style="--hc:#b57fff">
+        <div class="hero-glow"></div>
+        <div class="hero-label">RAM Used</div>
+        <div><span class="hero-value" id="hv-ram">—</span><span class="hero-unit">%</span></div>
+        <div class="hero-sub" id="hs-ram">waiting...</div>
+        <div class="hero-bar-wrap"><div class="hero-bar" id="hb-ram" style="width:0%"></div></div>
       </div>
     </div>
 
@@ -533,6 +653,70 @@ function connectWS() {
   ws.onerror = () => { ws.close(); };
 }
 
+// ── HERO CARDS ────────────────────────────────────────────────────────────────
+function updateHero(sensors) {
+  // CPU temp — prefer "CPU Package" or "CPU (Tdie)" or first CPU temp
+  const cpuTemp = sensors.find(s => s.category === 'cpu' && s.unit === '°C' &&
+    /package|tdie|tctl|cpu temp/i.test(s.label)) ||
+    sensors.find(s => s.category === 'cpu' && s.unit === '°C');
+
+  // GPU temp — prefer main GPU temperature
+  const gpuTemp = sensors.find(s => s.category === 'gpu' && s.unit === '°C' &&
+    /^gpu temperature/i.test(s.label)) ||
+    sensors.find(s => s.category === 'gpu' && s.unit === '°C');
+
+  // Power — total CPU package power or system power
+  const power = sensors.find(s => s.unit === 'W' &&
+    /cpu package power|total power|system power|package power/i.test(s.label)) ||
+    sensors.find(s => s.unit === 'W');
+
+  // Fan — highest RPM fan
+  const fans = sensors.filter(s => s.unit === 'RPM' && s.value > 0);
+  const topFan = fans.sort((a,b) => b.value - a.value)[0];
+
+  // RAM — physical memory load %
+  const ram = sensors.find(s => s.category === 'ram' && s.unit === '%' &&
+    /physical memory load|mem load|memory load/i.test(s.label)) ||
+    sensors.find(s => s.category === 'ram' && s.unit === '%');
+
+  if (cpuTemp) {
+    const v = cpuTemp.value;
+    const el = document.getElementById('hv-cpu-temp');
+    el.textContent = v;
+    el.className = 'hero-value' + (v >= 90 ? ' danger' : v >= 75 ? ' warn' : '');
+    document.getElementById('hs-cpu-temp').textContent = cpuTemp.label;
+    document.getElementById('hb-cpu-temp').style.width = Math.min(100, v) + '%';
+  }
+
+  if (gpuTemp) {
+    const v = gpuTemp.value;
+    const el = document.getElementById('hv-gpu-temp');
+    el.textContent = v;
+    el.className = 'hero-value' + (v >= 90 ? ' danger' : v >= 75 ? ' warn' : '');
+    document.getElementById('hs-gpu-temp').textContent = gpuTemp.label;
+    document.getElementById('hb-gpu-temp').style.width = Math.min(100, v) + '%';
+  }
+
+  if (power) {
+    document.getElementById('hv-power').textContent = Math.round(power.value);
+    document.getElementById('hs-power').textContent = power.label;
+  }
+
+  if (topFan) {
+    document.getElementById('hv-fan').textContent = Math.round(topFan.value);
+    document.getElementById('hs-fan').textContent = topFan.label;
+  }
+
+  if (ram) {
+    const v = ram.value;
+    const el = document.getElementById('hv-ram');
+    el.textContent = Math.round(v);
+    el.className = 'hero-value' + (v >= 95 ? ' danger' : v >= 80 ? ' warn' : '');
+    document.getElementById('hs-ram').textContent = ram.label;
+    document.getElementById('hb-ram').style.width = Math.min(100, v) + '%';
+  }
+}
+
 // ── RENDER ────────────────────────────────────────────────────────────────────
 function renderData(data) {
   const sensors = data.sensors || [];
@@ -540,6 +724,8 @@ function renderData(data) {
 
   document.getElementById('last-update').textContent =
     'Updated ' + new Date().toLocaleTimeString();
+
+  updateHero(sensors);
 
   const byCategory = {};
   CATEGORIES.forEach(c => byCategory[c.key] = []);
