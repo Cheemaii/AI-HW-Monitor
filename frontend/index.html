@@ -738,26 +738,26 @@ function connectWS() {
 
 // ── HERO CARDS ────────────────────────────────────────────────────────────────
 function updateHero(sensors) {
-  // CPU temp — Core Temperatures (avg) from HWiNFO64
-  const cpuTemp = sensors.find(s => s.unit === '°C' && /core temperatures \(avg\)/i.test(s.label)) ||
-    sensors.find(s => s.unit === '°C' && /tdie|tctl|package temp|cpu temp/i.test(s.label)) ||
+  // CPU temp — match by label keyword, any unit (°C may be garbled from CSV)
+  const cpuTemp = sensors.find(s => /core temperatures \(avg\)/i.test(s.label)) ||
+    sensors.find(s => /tdie|tctl|cpu package temp/i.test(s.label)) ||
     sensors.find(s => s.category === 'cpu' && s.unit === '°C');
 
-  // GPU temp — first GPU Temperature entry
-  const gpuTemp = sensors.find(s => s.unit === '°C' && /^gpu temperature$/i.test(s.label)) ||
-    sensors.find(s => s.category === 'gpu' && s.unit === '°C');
+  // GPU temp — first GPU Temperature entry by label
+  const gpuTemp = sensors.find(s => /^gpu temperature$/i.test(s.label)) ||
+    sensors.find(s => s.category === 'gpu' && /temp/i.test(s.label));
 
-  // Power — CPU Package Power
-  const power = sensors.find(s => s.unit === 'W' && /cpu package power/i.test(s.label)) ||
-    sensors.find(s => s.unit === 'W' && /package power|total board power/i.test(s.label)) ||
+  // Power — CPU Package Power by label
+  const power = sensors.find(s => /cpu package power/i.test(s.label)) ||
+    sensors.find(s => s.unit === 'W' && /package/i.test(s.label)) ||
     sensors.find(s => s.unit === 'W');
 
-  // Fan — highest RPM fan that's actually spinning
+  // Fan — highest RPM fan actually spinning
   const fans = sensors.filter(s => s.unit === 'RPM' && s.value > 100);
   const topFan = fans.sort((a, b) => b.value - a.value)[0];
 
-  // RAM — Physical Memory Load
-  const ram = sensors.find(s => s.unit === '%' && /physical memory load/i.test(s.label)) ||
+  // RAM — Physical Memory Load by label
+  const ram = sensors.find(s => /physical memory load/i.test(s.label)) ||
     sensors.find(s => s.category === 'ram' && s.unit === '%');
 
   if (cpuTemp) {
