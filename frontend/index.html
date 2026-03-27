@@ -346,7 +346,58 @@
     margin-top: 8px;
   }
 
-  /* ── HERO STATS ── */
+  /* ── AI BANNER ── */
+  #ai-banner {
+    display: none;
+    border-radius: 12px;
+    border: 1px solid var(--border2);
+    padding: 16px 20px;
+    margin-bottom: 28px;
+    position: relative;
+    overflow: hidden;
+    animation: cardIn 0.4s ease both;
+  }
+  #ai-banner.ok    { border-color: rgba(79,255,176,0.3);  background: rgba(79,255,176,0.04); }
+  #ai-banner.warn  { border-color: rgba(255,184,77,0.4);  background: rgba(255,184,77,0.06); }
+  #ai-banner.alert { border-color: rgba(255,77,109,0.4);  background: rgba(255,77,109,0.06); }
+  .ai-banner-top {
+    display: flex; align-items: center; gap: 10px; margin-bottom: 6px;
+  }
+  .ai-badge {
+    font-family: var(--font-mono);
+    font-size: 9px; font-weight: 600;
+    letter-spacing: 0.12em;
+    padding: 3px 8px;
+    border-radius: 4px;
+    text-transform: uppercase;
+  }
+  .ok    .ai-badge { background: rgba(79,255,176,0.15);  color: var(--accent); }
+  .warn  .ai-badge { background: rgba(255,184,77,0.15);  color: var(--warn); }
+  .alert .ai-badge { background: rgba(255,77,109,0.15);  color: var(--danger); }
+  .ai-headline {
+    font-family: var(--font-mono);
+    font-size: 13px; font-weight: 500;
+    color: var(--text);
+  }
+  .ai-detail {
+    font-size: 12px; color: var(--muted);
+    line-height: 1.6; margin-top: 4px;
+  }
+  .ai-time {
+    font-family: var(--font-mono);
+    font-size: 10px; color: var(--muted);
+    margin-left: auto;
+  }
+  .ai-thinking {
+    display: flex; align-items: center; gap: 8px;
+    font-family: var(--font-mono); font-size: 11px; color: var(--muted);
+    margin-bottom: 28px;
+  }
+  .ai-thinking-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--accent); opacity: 0.5;
+    animation: pulse 1.5s ease-in-out infinite;
+  }
   .hero-grid {
     display: grid;
     grid-template-columns: repeat(4, 1fr);
@@ -553,6 +604,20 @@
       </div>
     </div>
 
+    <!-- AI SURVEILLANCE BANNER -->
+    <div class="ai-thinking" id="ai-thinking" style="display:none;">
+      <div class="ai-thinking-dot"></div>
+      <span>Claude is analyzing your system...</span>
+    </div>
+    <div id="ai-banner">
+      <div class="ai-banner-top">
+        <div class="ai-badge" id="ai-badge">—</div>
+        <div class="ai-headline" id="ai-headline">—</div>
+        <div class="ai-time" id="ai-time">—</div>
+      </div>
+      <div class="ai-detail" id="ai-detail"></div>
+    </div>
+
     <!-- HERO STAT CARDS -->
     <div class="hero-grid" id="hero-grid">
       <div class="hero-card" id="hero-cpu-temp" style="--hc:#4fffb0">
@@ -578,9 +643,10 @@
 
       <div class="hero-card" id="hero-ram" style="--hc:#b57fff">
         <div class="hero-glow"></div>
-        <div class="hero-label">RAM Clock — <span id="lbl-ram">—</span></div>
-        <div><span class="hero-value" id="hv-ram">—</span><span class="hero-unit">MHz</span></div>
+        <div class="hero-label">RAM Load — <span id="lbl-ram">—</span></div>
+        <div><span class="hero-value" id="hv-ram">—</span><span class="hero-unit">%</span></div>
         <div class="hero-sub" id="hs-ram">waiting...</div>
+        <div class="hero-bar-wrap"><div class="hero-bar" id="hb-ram" style="width:0%"></div></div>
       </div>
     </div>
 
@@ -714,10 +780,15 @@ function connectWS() {
     ws.send(JSON.stringify({ token: currentToken }));
     setStatus(true);
     showToast('Connected — waiting for data...');
+    showAIThinking();
   };
 
   ws.onmessage = (e) => {
-    try { renderData(JSON.parse(e.data)); } catch {}
+    try {
+      const data = JSON.parse(e.data);
+      if (data.type === 'ai_analysis') renderAnalysis(data);
+      else renderData(data);
+    } catch {}
   };
 
   ws.onclose = () => {
@@ -730,7 +801,35 @@ function connectWS() {
   ws.onerror = () => { ws.close(); };
 }
 
-// ── HERO CARDS ────────────────────────────────────────────────────────────────
+// ── AI ANALYSIS ───────────────────────────────────────────────────────────────
+function renderAnalysis(analysis) {
+  const banner  = document.getElementById('ai-banner');
+  const badge   = document.getElementById('ai-badge');
+  const headline = document.getElementById('ai-headline');
+  const detail  = document.getElementById('ai-detail');
+  const time    = document.getElementById('ai-time');
+  const thinking = document.getElementById('ai-thinking');
+
+  if (!analysis.status) return;
+
+  thinking.style.display = 'none';
+  banner.style.display = 'block';
+  banner.className = analysis.status;
+  badge.textContent = analysis.status === 'ok' ? '✓ All Clear' :
+                      analysis.status === 'warn' ? '⚠ Watch' : '✖ Alert';
+  headline.textContent = analysis.headline || '';
+  detail.textContent = analysis.detail || '';
+  time.textContent = analysis.timestamp
+    ? new Date(analysis.timestamp).toLocaleTimeString()
+    : '';
+}
+
+function showAIThinking() {
+  document.getElementById('ai-thinking').style.display = 'flex';
+  document.getElementById('ai-banner').style.display = 'none';
+}
+
+
 function updateHero(sensors) {
   // CPU temp — match by label keyword, any unit (°C may be garbled from CSV)
   const cpuTemp = sensors.find(s => /core temperatures \(avg\)/i.test(s.label)) ||
@@ -747,8 +846,8 @@ function updateHero(sensors) {
     sensors.find(s => s.unit === 'W');
 
   // RAM — Memory Clock MHz
-  const ram = sensors.find(s => /^memory clock/i.test(s.label)) ||
-    sensors.find(s => s.category === 'ram' && s.unit === 'MHz');
+  const ram = sensors.find(s => /physical memory load/i.test(s.label)) ||
+    sensors.find(s => s.category === 'ram' && s.unit === '%');
 
   if (cpuTemp) {
     const v = cpuTemp.value;
@@ -774,8 +873,12 @@ function updateHero(sensors) {
   }
 
   if (ram) {
-    document.getElementById('hv-ram').textContent = Math.round(ram.value);
+    const v = ram.value;
+    const el = document.getElementById('hv-ram');
+    el.textContent = Math.round(v);
+    el.className = 'hero-value' + (v >= 95 ? ' danger' : v >= 80 ? ' warn' : '');
     document.getElementById('hs-ram').textContent = ram.label;
+    document.getElementById('hb-ram').style.width = Math.min(100, v) + '%';
   }
 }
 
