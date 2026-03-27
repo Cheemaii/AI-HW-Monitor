@@ -349,7 +349,7 @@
   /* ── HERO STATS ── */
   .hero-grid {
     display: grid;
-    grid-template-columns: repeat(5, 1fr);
+    grid-template-columns: repeat(4, 1fr);
     gap: 14px;
     margin-bottom: 36px;
   }
@@ -575,18 +575,12 @@
         <div><span class="hero-value" id="hv-power">—</span><span class="hero-unit">W</span></div>
         <div class="hero-sub" id="hs-power">waiting...</div>
       </div>
-      <div class="hero-card" id="hero-fan" style="--hc:#4dd9ff">
-        <div class="hero-glow"></div>
-        <div class="hero-label">Top Fan Speed</div>
-        <div><span class="hero-value" id="hv-fan">—</span><span class="hero-unit">RPM</span></div>
-        <div class="hero-sub" id="hs-fan">waiting...</div>
-      </div>
+
       <div class="hero-card" id="hero-ram" style="--hc:#b57fff">
         <div class="hero-glow"></div>
-        <div class="hero-label">RAM Load — <span id="lbl-ram">—</span></div>
-        <div><span class="hero-value" id="hv-ram">—</span><span class="hero-unit">%</span></div>
+        <div class="hero-label">RAM Clock — <span id="lbl-ram">—</span></div>
+        <div><span class="hero-value" id="hv-ram">—</span><span class="hero-unit">MHz</span></div>
         <div class="hero-sub" id="hs-ram">waiting...</div>
-        <div class="hero-bar-wrap"><div class="hero-bar" id="hb-ram" style="width:0%"></div></div>
       </div>
     </div>
 
@@ -752,13 +746,9 @@ function updateHero(sensors) {
     sensors.find(s => s.unit === 'W' && /package/i.test(s.label)) ||
     sensors.find(s => s.unit === 'W');
 
-  // Fan — highest RPM fan actually spinning
-  const fans = sensors.filter(s => s.unit === 'RPM' && s.value > 100);
-  const topFan = fans.sort((a, b) => b.value - a.value)[0];
-
-  // RAM — Physical Memory Load by label
-  const ram = sensors.find(s => /physical memory load/i.test(s.label)) ||
-    sensors.find(s => s.category === 'ram' && s.unit === '%');
+  // RAM — Memory Clock MHz
+  const ram = sensors.find(s => /^memory clock/i.test(s.label)) ||
+    sensors.find(s => s.category === 'ram' && s.unit === 'MHz');
 
   if (cpuTemp) {
     const v = cpuTemp.value;
@@ -783,18 +773,9 @@ function updateHero(sensors) {
     document.getElementById('hs-power').textContent = power.label;
   }
 
-  if (topFan) {
-    document.getElementById('hv-fan').textContent = Math.round(topFan.value);
-    document.getElementById('hs-fan').textContent = topFan.label;
-  }
-
   if (ram) {
-    const v = ram.value;
-    const el = document.getElementById('hv-ram');
-    el.textContent = Math.round(v);
-    el.className = 'hero-value' + (v >= 95 ? ' danger' : v >= 80 ? ' warn' : '');
+    document.getElementById('hv-ram').textContent = Math.round(ram.value);
     document.getElementById('hs-ram').textContent = ram.label;
-    document.getElementById('hb-ram').style.width = Math.min(100, v) + '%';
   }
 }
 
