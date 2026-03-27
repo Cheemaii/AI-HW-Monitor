@@ -1,0 +1,650 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0" />
+<title>HWStream — Live System Monitor</title>
+<link rel="preconnect" href="https://fonts.googleapis.com" />
+<link href="https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:wght@400;500;600&family=IBM+Plex+Sans:wght@300;400;500&display=swap" rel="stylesheet" />
+<style>
+  :root {
+    --bg:        #0a0a0c;
+    --surface:   #111114;
+    --border:    #1e1e24;
+    --border2:   #2a2a34;
+    --text:      #e2e2e8;
+    --muted:     #55556a;
+    --accent:    #4fffb0;
+    --accent2:   #00c8ff;
+    --warn:      #ffb84d;
+    --danger:    #ff4d6d;
+    --cpu:       #4fffb0;
+    --gpu:       #00c8ff;
+    --ram:       #b57fff;
+    --fan:       #4dd9ff;
+    --voltage:   #ffd84d;
+    --storage:   #ff9f4d;
+    --font-mono: 'IBM Plex Mono', monospace;
+    --font-sans: 'IBM Plex Sans', sans-serif;
+  }
+
+  *, *::before, *::after { box-sizing: border-box; margin: 0; padding: 0; }
+
+  body {
+    background: var(--bg);
+    color: var(--text);
+    font-family: var(--font-sans);
+    min-height: 100vh;
+    overflow-x: hidden;
+  }
+
+  /* grid noise overlay */
+  body::before {
+    content: '';
+    position: fixed; inset: 0;
+    background-image:
+      linear-gradient(rgba(79,255,176,0.02) 1px, transparent 1px),
+      linear-gradient(90deg, rgba(79,255,176,0.02) 1px, transparent 1px);
+    background-size: 40px 40px;
+    pointer-events: none;
+    z-index: 0;
+  }
+
+  #app { position: relative; z-index: 1; max-width: 1280px; margin: 0 auto; padding: 0 24px 60px; }
+
+  /* ── HEADER ── */
+  header {
+    display: flex; align-items: center; justify-content: space-between;
+    padding: 28px 0 32px;
+    border-bottom: 1px solid var(--border);
+    margin-bottom: 32px;
+  }
+  .logo {
+    display: flex; align-items: center; gap: 12px;
+  }
+  .logo-icon {
+    width: 34px; height: 34px;
+    border: 1.5px solid var(--accent);
+    border-radius: 8px;
+    display: grid; place-items: center;
+    font-family: var(--font-mono);
+    font-size: 13px;
+    color: var(--accent);
+    letter-spacing: -1px;
+    box-shadow: 0 0 12px rgba(79,255,176,0.2);
+  }
+  .logo-text {
+    font-family: var(--font-mono);
+    font-size: 15px;
+    font-weight: 600;
+    letter-spacing: 0.08em;
+    color: var(--text);
+  }
+  .logo-text span { color: var(--accent); }
+
+  .status-pill {
+    display: flex; align-items: center; gap: 8px;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 100px;
+    padding: 6px 14px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    color: var(--muted);
+    transition: all 0.3s;
+  }
+  .status-pill.live { color: var(--accent); border-color: rgba(79,255,176,0.3); }
+  .status-dot {
+    width: 6px; height: 6px; border-radius: 50%;
+    background: var(--muted);
+    transition: background 0.3s;
+  }
+  .status-pill.live .status-dot {
+    background: var(--accent);
+    box-shadow: 0 0 6px var(--accent);
+    animation: pulse 2s ease-in-out infinite;
+  }
+  @keyframes pulse {
+    0%,100% { opacity: 1; } 50% { opacity: 0.4; }
+  }
+
+  /* ── CONNECT PANEL (landing) ── */
+  #connect-panel {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 80px 24px;
+    text-align: center;
+  }
+  .connect-title {
+    font-family: var(--font-mono);
+    font-size: 28px; font-weight: 600;
+    color: var(--text);
+    margin-bottom: 10px;
+  }
+  .connect-sub {
+    color: var(--muted); font-size: 14px; line-height: 1.6;
+    max-width: 480px; margin-bottom: 40px;
+  }
+  .token-form {
+    display: flex; gap: 10px; width: 100%; max-width: 440px;
+    margin-bottom: 48px;
+  }
+  .token-input {
+    flex: 1;
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 12px 16px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 13px;
+    outline: none;
+    transition: border-color 0.2s;
+  }
+  .token-input:focus { border-color: var(--accent); }
+  .token-input::placeholder { color: var(--muted); }
+
+  .btn {
+    background: var(--accent);
+    color: #000;
+    border: none;
+    border-radius: 8px;
+    padding: 12px 22px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    font-weight: 600;
+    letter-spacing: 0.05em;
+    cursor: pointer;
+    transition: opacity 0.2s, box-shadow 0.2s;
+  }
+  .btn:hover { opacity: 0.85; box-shadow: 0 0 16px rgba(79,255,176,0.35); }
+  .btn-ghost {
+    background: transparent;
+    border: 1px solid var(--border2);
+    color: var(--muted);
+    border-radius: 8px;
+    padding: 10px 18px;
+    font-family: var(--font-mono);
+    font-size: 11px;
+    cursor: pointer;
+    transition: all 0.2s;
+  }
+  .btn-ghost:hover { border-color: var(--text); color: var(--text); }
+
+  .steps {
+    display: grid; grid-template-columns: repeat(3, 1fr); gap: 16px;
+    width: 100%; max-width: 720px; text-align: left;
+  }
+  .step {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 12px;
+    padding: 20px;
+  }
+  .step-num {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    color: var(--accent);
+    letter-spacing: 0.1em;
+    margin-bottom: 8px;
+  }
+  .step-title { font-size: 13px; font-weight: 500; margin-bottom: 6px; }
+  .step-desc { font-size: 12px; color: var(--muted); line-height: 1.5; }
+  code {
+    font-family: var(--font-mono);
+    background: rgba(79,255,176,0.08);
+    color: var(--accent);
+    padding: 1px 5px;
+    border-radius: 4px;
+    font-size: 11px;
+  }
+
+  /* ── DASHBOARD ── */
+  #dashboard { display: none; }
+
+  .meta-bar {
+    display: flex; align-items: center; justify-content: space-between;
+    margin-bottom: 28px; flex-wrap: wrap; gap: 12px;
+  }
+  .system-name {
+    font-family: var(--font-mono);
+    font-size: 13px; color: var(--muted);
+  }
+  .system-name strong { color: var(--text); }
+  .last-update {
+    font-family: var(--font-mono);
+    font-size: 11px; color: var(--muted);
+  }
+
+  /* ── SECTION ── */
+  .section { margin-bottom: 32px; }
+  .section-header {
+    display: flex; align-items: center; gap: 10px;
+    margin-bottom: 14px;
+  }
+  .section-dot {
+    width: 8px; height: 8px; border-radius: 50%;
+    flex-shrink: 0;
+  }
+  .section-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    font-weight: 600;
+    letter-spacing: 0.14em;
+    text-transform: uppercase;
+    color: var(--muted);
+  }
+  .section-line {
+    flex: 1; height: 1px;
+    background: var(--border);
+  }
+
+  .cards-grid {
+    display: grid;
+    grid-template-columns: repeat(auto-fill, minmax(220px, 1fr));
+    gap: 12px;
+  }
+
+  /* ── SENSOR CARD ── */
+  .card {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 10px;
+    padding: 16px;
+    position: relative;
+    overflow: hidden;
+    transition: border-color 0.25s, transform 0.15s;
+    animation: cardIn 0.3s ease both;
+  }
+  .card:hover { transform: translateY(-1px); border-color: var(--border2); }
+  @keyframes cardIn {
+    from { opacity: 0; transform: translateY(6px); }
+    to   { opacity: 1; transform: translateY(0); }
+  }
+  .card::before {
+    content: '';
+    position: absolute; top: 0; left: 0; right: 0;
+    height: 2px;
+    background: var(--cat-color, var(--accent));
+    opacity: 0.6;
+  }
+  .card-label {
+    font-size: 11px; color: var(--muted);
+    margin-bottom: 8px;
+    white-space: nowrap; overflow: hidden; text-overflow: ellipsis;
+  }
+  .card-value {
+    font-family: var(--font-mono);
+    font-size: 26px; font-weight: 600;
+    line-height: 1;
+    color: var(--cat-color, var(--text));
+    transition: color 0.3s;
+  }
+  .card-value.warn { color: var(--warn) !important; }
+  .card-value.danger { color: var(--danger) !important; animation: shake 0.3s ease; }
+  @keyframes shake {
+    0%,100% { transform: translateX(0); }
+    25% { transform: translateX(-2px); }
+    75% { transform: translateX(2px); }
+  }
+  .card-unit {
+    font-family: var(--font-mono);
+    font-size: 12px; color: var(--muted);
+    margin-left: 3px;
+  }
+
+  /* bar */
+  .card-bar-wrap {
+    margin-top: 10px;
+    height: 3px;
+    background: rgba(255,255,255,0.05);
+    border-radius: 99px;
+    overflow: hidden;
+  }
+  .card-bar {
+    height: 100%;
+    border-radius: 99px;
+    background: var(--cat-color, var(--accent));
+    transition: width 0.6s ease;
+    opacity: 0.7;
+  }
+
+  /* ── EMPTY / ERROR ── */
+  .empty-state {
+    display: flex; flex-direction: column; align-items: center;
+    padding: 60px 24px; color: var(--muted);
+    font-family: var(--font-mono); font-size: 13px; gap: 8px;
+  }
+
+  /* ── TOAST ── */
+  #toast {
+    position: fixed; bottom: 28px; left: 50%; transform: translateX(-50%);
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 12px 20px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--text);
+    opacity: 0;
+    transition: opacity 0.3s;
+    pointer-events: none;
+    z-index: 99;
+    white-space: nowrap;
+  }
+  #toast.show { opacity: 1; }
+
+  /* ── COMMAND BLOCK ── */
+  .cmd-block {
+    background: var(--surface);
+    border: 1px solid var(--border);
+    border-radius: 8px;
+    padding: 14px 18px;
+    font-family: var(--font-mono);
+    font-size: 12px;
+    color: var(--accent2);
+    overflow-x: auto;
+    margin-top: 8px;
+  }
+
+  @media (max-width: 600px) {
+    .steps { grid-template-columns: 1fr; }
+    .token-form { flex-direction: column; }
+    .cards-grid { grid-template-columns: 1fr 1fr; }
+  }
+</style>
+</head>
+<body>
+<div id="app">
+
+  <!-- HEADER -->
+  <header>
+    <div class="logo">
+      <div class="logo-icon">HW</div>
+      <div class="logo-text">HW<span>Stream</span></div>
+    </div>
+    <div class="status-pill" id="status-pill">
+      <div class="status-dot"></div>
+      <span id="status-text">disconnected</span>
+    </div>
+  </header>
+
+  <!-- CONNECT PANEL -->
+  <div id="connect-panel">
+    <div class="connect-title">Your PC, live on the web.</div>
+    <p class="connect-sub">
+      Stream HWiNFO64 sensor data to a public URL in seconds.
+      Enter a token (any unique ID) to view or share a live dashboard.
+    </p>
+
+    <div class="token-form">
+      <input class="token-input" id="token-input" placeholder="Enter token (e.g. zain-pc)" maxlength="64" />
+      <button class="btn" onclick="connectToken()">Connect →</button>
+    </div>
+
+    <div class="steps">
+      <div class="step">
+        <div class="step-num">01 / HWINFO64</div>
+        <div class="step-title">Enable CSV logging</div>
+        <div class="step-desc">Sensors → Settings → Log all values to CSV. Set interval to <code>2000ms</code>.</div>
+      </div>
+      <div class="step">
+        <div class="step-num">02 / PYTHON</div>
+        <div class="step-title">Run the uploader</div>
+        <div class="step-desc">
+          <code>pip install requests</code><br/><br/>
+          Then run <code>hwstream.py</code> with your CSV path and token.
+        </div>
+      </div>
+      <div class="step">
+        <div class="step-num">03 / SHARE</div>
+        <div class="step-title">Share your URL</div>
+        <div class="step-desc">Anyone with your token URL can watch your system stats in real time.</div>
+      </div>
+    </div>
+
+    <div style="margin-top:40px; width:100%; max-width:720px; text-align:left;">
+      <div class="step-num" style="margin-bottom:8px;">UPLOADER COMMAND</div>
+      <div class="cmd-block" id="cmd-preview">
+        python hwstream.py --csv "C:\path\to\HWiNFO64.CSV" --token YOUR_TOKEN --server https://YOUR_SERVER
+      </div>
+    </div>
+  </div>
+
+  <!-- DASHBOARD -->
+  <div id="dashboard">
+    <div class="meta-bar">
+      <div class="system-name">Watching token: <strong id="active-token">—</strong></div>
+      <div style="display:flex;gap:10px;align-items:center;">
+        <div class="last-update" id="last-update">—</div>
+        <button class="btn-ghost" onclick="disconnect()">← Back</button>
+      </div>
+    </div>
+
+    <div id="sections-container"></div>
+  </div>
+
+</div>
+
+<div id="toast"></div>
+
+<script>
+// ── CONFIG ────────────────────────────────────────────────────────────────────
+// When deploying, replace this with your actual backend URL
+const SERVER = window.location.origin.includes('localhost')
+  ? 'http://localhost:3001'
+  : window.location.origin; // same origin if frontend served from backend
+
+const WS_URL = SERVER.replace(/^http/, 'ws');
+
+// ── STATE ─────────────────────────────────────────────────────────────────────
+let ws = null;
+let currentToken = null;
+let reconnectTimer = null;
+let sensorMap = {};
+
+const CATEGORIES = [
+  { key: 'cpu',     label: 'CPU',     color: '#4fffb0' },
+  { key: 'gpu',     label: 'GPU',     color: '#00c8ff' },
+  { key: 'ram',     label: 'Memory',  color: '#b57fff' },
+  { key: 'fan',     label: 'Fans',    color: '#4dd9ff' },
+  { key: 'voltage', label: 'Voltages',color: '#ffd84d' },
+  { key: 'storage', label: 'Storage', color: '#ff9f4d' },
+  { key: 'other',   label: 'Other',   color: '#888899' },
+];
+
+// ── TOKEN FROM URL ────────────────────────────────────────────────────────────
+window.addEventListener('load', () => {
+  const path = window.location.pathname;
+  const m = path.match(/\/dashboard\/([^/]+)/);
+  if (m) {
+    document.getElementById('token-input').value = m[1];
+    connectToken();
+  }
+  updateCmdPreview();
+});
+
+document.getElementById('token-input').addEventListener('input', updateCmdPreview);
+document.getElementById('token-input').addEventListener('keydown', e => {
+  if (e.key === 'Enter') connectToken();
+});
+
+function updateCmdPreview() {
+  const t = document.getElementById('token-input').value.trim() || 'YOUR_TOKEN';
+  document.getElementById('cmd-preview').textContent =
+    `python hwstream.py --csv "C:\\path\\to\\HWiNFO64.CSV" --token ${t} --server ${window.location.origin}`;
+}
+
+// ── CONNECT ───────────────────────────────────────────────────────────────────
+function connectToken() {
+  const token = document.getElementById('token-input').value.trim();
+  if (!token) { showToast('Enter a token first'); return; }
+
+  currentToken = token;
+  document.getElementById('active-token').textContent = token;
+  window.history.replaceState({}, '', `/dashboard/${token}`);
+
+  document.getElementById('connect-panel').style.display = 'none';
+  document.getElementById('dashboard').style.display = 'block';
+
+  // Try to get existing snapshot first
+  fetch(`${SERVER}/api/snapshot/${token}`)
+    .then(r => r.ok ? r.json() : null)
+    .then(data => { if (data) renderData(data); })
+    .catch(() => {});
+
+  connectWS();
+}
+
+function disconnect() {
+  if (ws) ws.close();
+  ws = null;
+  clearTimeout(reconnectTimer);
+  currentToken = null;
+  sensorMap = {};
+  document.getElementById('connect-panel').style.display = '';
+  document.getElementById('dashboard').style.display = 'none';
+  document.getElementById('sections-container').innerHTML = '';
+  setStatus(false);
+  window.history.replaceState({}, '', '/');
+}
+
+// ── WEBSOCKET ─────────────────────────────────────────────────────────────────
+function connectWS() {
+  if (ws) ws.close();
+  ws = new WebSocket(`${WS_URL}`);
+
+  ws.onopen = () => {
+    ws.send(JSON.stringify({ token: currentToken }));
+    setStatus(true);
+    showToast('Connected — waiting for data...');
+  };
+
+  ws.onmessage = (e) => {
+    try { renderData(JSON.parse(e.data)); } catch {}
+  };
+
+  ws.onclose = () => {
+    setStatus(false);
+    if (currentToken) {
+      reconnectTimer = setTimeout(connectWS, 4000);
+    }
+  };
+
+  ws.onerror = () => { ws.close(); };
+}
+
+// ── RENDER ────────────────────────────────────────────────────────────────────
+function renderData(data) {
+  const sensors = data.sensors || [];
+  if (!sensors.length) return;
+
+  document.getElementById('last-update').textContent =
+    'Updated ' + new Date().toLocaleTimeString();
+
+  const byCategory = {};
+  CATEGORIES.forEach(c => byCategory[c.key] = []);
+
+  sensors.forEach(s => {
+    const cat = s.category || 'other';
+    if (byCategory[cat]) byCategory[cat].push(s);
+    else byCategory['other'].push(s);
+  });
+
+  const container = document.getElementById('sections-container');
+
+  CATEGORIES.forEach(({ key, label, color }) => {
+    const items = byCategory[key];
+    if (!items || items.length === 0) return;
+
+    let section = document.getElementById(`section-${key}`);
+    if (!section) {
+      section = document.createElement('div');
+      section.className = 'section';
+      section.id = `section-${key}`;
+      section.innerHTML = `
+        <div class="section-header">
+          <div class="section-dot" style="background:${color}"></div>
+          <div class="section-label">${label}</div>
+          <div class="section-line"></div>
+        </div>
+        <div class="cards-grid" id="grid-${key}"></div>
+      `;
+      container.appendChild(section);
+    }
+
+    const grid = document.getElementById(`grid-${key}`);
+    items.forEach(s => updateCard(grid, s, color));
+  });
+}
+
+function updateCard(grid, sensor, color) {
+  const cardId = `card-${sensor.id}`;
+  let card = document.getElementById(cardId);
+
+  const { level, barPct } = classify(sensor);
+
+  if (!card) {
+    card = document.createElement('div');
+    card.className = 'card';
+    card.id = cardId;
+    card.style.setProperty('--cat-color', color);
+    card.innerHTML = `
+      <div class="card-label" title="${sensor.label}">${sensor.label}</div>
+      <div>
+        <span class="card-value" id="val-${sensor.id}">${sensor.value}</span>
+        <span class="card-unit">${sensor.unit}</span>
+      </div>
+      ${barPct !== null ? `<div class="card-bar-wrap"><div class="card-bar" id="bar-${sensor.id}" style="width:${barPct}%"></div></div>` : ''}
+    `;
+    grid.appendChild(card);
+  } else {
+    const valEl = document.getElementById(`val-${sensor.id}`);
+    const barEl = document.getElementById(`bar-${sensor.id}`);
+    if (valEl) {
+      valEl.textContent = sensor.value;
+      valEl.className = 'card-value ' + (level === 'danger' ? 'danger' : level === 'warn' ? 'warn' : '');
+    }
+    if (barEl && barPct !== null) barEl.style.width = barPct + '%';
+  }
+}
+
+function classify(sensor) {
+  const u = sensor.unit;
+  const v = sensor.value;
+  let level = 'ok', barPct = null;
+
+  if (u === '°C') {
+    barPct = Math.min(100, (v / 100) * 100);
+    if (v >= 90) level = 'danger';
+    else if (v >= 75) level = 'warn';
+  } else if (u === '%') {
+    barPct = Math.min(100, v);
+    if (v >= 95) level = 'danger';
+    else if (v >= 80) level = 'warn';
+  } else if (u === 'RPM') {
+    if (v < 200 && v > 0) level = 'warn';
+    if (v === 0) level = 'danger';
+  }
+
+  return { level, barPct };
+}
+
+// ── UI HELPERS ────────────────────────────────────────────────────────────────
+function setStatus(live) {
+  const pill = document.getElementById('status-pill');
+  const text = document.getElementById('status-text');
+  pill.className = 'status-pill' + (live ? ' live' : '');
+  text.textContent = live ? 'live' : 'reconnecting...';
+}
+
+let toastTimer = null;
+function showToast(msg) {
+  const el = document.getElementById('toast');
+  el.textContent = msg;
+  el.classList.add('show');
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => el.classList.remove('show'), 3000);
+}
+</script>
+</body>
+</html>
