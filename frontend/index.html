@@ -507,33 +507,33 @@
     <div class="hero-grid" id="hero-grid">
       <div class="hero-card" id="hero-cpu-temp" style="--hc:#4fffb0">
         <div class="hero-glow"></div>
-        <div class="hero-label">CPU Temp</div>
+        <div class="hero-label">CPU Temp — Ryzen 9 9800X3D</div>
         <div><span class="hero-value" id="hv-cpu-temp">—</span><span class="hero-unit">°C</span></div>
         <div class="hero-sub" id="hs-cpu-temp">waiting...</div>
         <div class="hero-bar-wrap"><div class="hero-bar" id="hb-cpu-temp" style="width:0%"></div></div>
       </div>
       <div class="hero-card" id="hero-gpu-temp" style="--hc:#00c8ff">
         <div class="hero-glow"></div>
-        <div class="hero-label">GPU Temp</div>
+        <div class="hero-label">GPU Temp — RX 9070 XT</div>
         <div><span class="hero-value" id="hv-gpu-temp">—</span><span class="hero-unit">°C</span></div>
         <div class="hero-sub" id="hs-gpu-temp">waiting...</div>
         <div class="hero-bar-wrap"><div class="hero-bar" id="hb-gpu-temp" style="width:0%"></div></div>
       </div>
       <div class="hero-card" id="hero-power" style="--hc:#ffd84d">
         <div class="hero-glow"></div>
-        <div class="hero-label">System Power</div>
+        <div class="hero-label">CPU Package Power</div>
         <div><span class="hero-value" id="hv-power">—</span><span class="hero-unit">W</span></div>
         <div class="hero-sub" id="hs-power">waiting...</div>
       </div>
       <div class="hero-card" id="hero-fan" style="--hc:#4dd9ff">
         <div class="hero-glow"></div>
-        <div class="hero-label">Top Fan</div>
+        <div class="hero-label">Top Fan Speed</div>
         <div><span class="hero-value" id="hv-fan">—</span><span class="hero-unit">RPM</span></div>
         <div class="hero-sub" id="hs-fan">waiting...</div>
       </div>
       <div class="hero-card" id="hero-ram" style="--hc:#b57fff">
         <div class="hero-glow"></div>
-        <div class="hero-label">RAM Used</div>
+        <div class="hero-label">RAM Load</div>
         <div><span class="hero-value" id="hv-ram">—</span><span class="hero-unit">%</span></div>
         <div class="hero-sub" id="hs-ram">waiting...</div>
         <div class="hero-bar-wrap"><div class="hero-bar" id="hb-ram" style="width:0%"></div></div>
@@ -655,28 +655,26 @@ function connectWS() {
 
 // ── HERO CARDS ────────────────────────────────────────────────────────────────
 function updateHero(sensors) {
-  // CPU temp — prefer "CPU Package" or "CPU (Tdie)" or first CPU temp
-  const cpuTemp = sensors.find(s => s.category === 'cpu' && s.unit === '°C' &&
-    /package|tdie|tctl|cpu temp/i.test(s.label)) ||
+  // CPU temp — Core Temperatures (avg) from HWiNFO64
+  const cpuTemp = sensors.find(s => s.unit === '°C' && /core temperatures \(avg\)/i.test(s.label)) ||
+    sensors.find(s => s.unit === '°C' && /tdie|tctl|package temp|cpu temp/i.test(s.label)) ||
     sensors.find(s => s.category === 'cpu' && s.unit === '°C');
 
-  // GPU temp — prefer main GPU temperature
-  const gpuTemp = sensors.find(s => s.category === 'gpu' && s.unit === '°C' &&
-    /^gpu temperature/i.test(s.label)) ||
+  // GPU temp — first GPU Temperature entry
+  const gpuTemp = sensors.find(s => s.unit === '°C' && /^gpu temperature$/i.test(s.label)) ||
     sensors.find(s => s.category === 'gpu' && s.unit === '°C');
 
-  // Power — total CPU package power or system power
-  const power = sensors.find(s => s.unit === 'W' &&
-    /cpu package power|total power|system power|package power/i.test(s.label)) ||
+  // Power — CPU Package Power
+  const power = sensors.find(s => s.unit === 'W' && /cpu package power/i.test(s.label)) ||
+    sensors.find(s => s.unit === 'W' && /package power|total board power/i.test(s.label)) ||
     sensors.find(s => s.unit === 'W');
 
-  // Fan — highest RPM fan
-  const fans = sensors.filter(s => s.unit === 'RPM' && s.value > 0);
-  const topFan = fans.sort((a,b) => b.value - a.value)[0];
+  // Fan — highest RPM fan that's actually spinning
+  const fans = sensors.filter(s => s.unit === 'RPM' && s.value > 100);
+  const topFan = fans.sort((a, b) => b.value - a.value)[0];
 
-  // RAM — physical memory load %
-  const ram = sensors.find(s => s.category === 'ram' && s.unit === '%' &&
-    /physical memory load|mem load|memory load/i.test(s.label)) ||
+  // RAM — Physical Memory Load
+  const ram = sensors.find(s => s.unit === '%' && /physical memory load/i.test(s.label)) ||
     sensors.find(s => s.category === 'ram' && s.unit === '%');
 
   if (cpuTemp) {
