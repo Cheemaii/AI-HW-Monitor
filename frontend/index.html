@@ -427,7 +427,37 @@
     opacity: 0.6;
   }
 
-  @media (max-width: 900px) { .hero-grid { grid-template-columns: repeat(3, 1fr); } }
+  /* ── SPECS FORM ── */
+  .specs-grid {
+    display: grid;
+    grid-template-columns: 1fr 1fr;
+    gap: 10px;
+    width: 100%;
+    max-width: 440px;
+    margin-bottom: 16px;
+  }
+  .specs-input {
+    background: var(--surface);
+    border: 1px solid var(--border2);
+    border-radius: 8px;
+    padding: 10px 14px;
+    color: var(--text);
+    font-family: var(--font-mono);
+    font-size: 12px;
+    outline: none;
+    transition: border-color 0.2s;
+    width: 100%;
+  }
+  .specs-input:focus { border-color: var(--accent); }
+  .specs-input::placeholder { color: var(--muted); }
+  .specs-label {
+    font-family: var(--font-mono);
+    font-size: 10px;
+    letter-spacing: 0.1em;
+    color: var(--muted);
+    margin-bottom: 4px;
+    text-transform: uppercase;
+  }
   @media (max-width: 600px) {
     .steps { grid-template-columns: 1fr; }
     .token-form { flex-direction: column; }
@@ -456,15 +486,35 @@
     <div class="connect-title">Your PC, live on the web.</div>
     <p class="connect-sub">
       Stream HWiNFO64 sensor data to a public URL in seconds.
-      Enter a token (any unique ID) to view or share a live dashboard.
+      Enter a token and your hardware specs to personalize your dashboard.
     </p>
 
     <div class="token-form">
       <input class="token-input" id="token-input" placeholder="Enter token (e.g. zain-pc)" maxlength="64" />
-      <button class="btn" onclick="connectToken()">Connect →</button>
     </div>
 
-    <div class="steps">
+    <div class="specs-grid">
+      <div>
+        <div class="specs-label">CPU</div>
+        <input class="specs-input" id="spec-cpu" placeholder="e.g. Ryzen 9 9800X3D" />
+      </div>
+      <div>
+        <div class="specs-label">GPU</div>
+        <input class="specs-input" id="spec-gpu" placeholder="e.g. RX 9070 XT" />
+      </div>
+      <div>
+        <div class="specs-label">RAM</div>
+        <input class="specs-input" id="spec-ram" placeholder="e.g. 32GB DDR5-6000" />
+      </div>
+      <div>
+        <div class="specs-label">Motherboard / Other</div>
+        <input class="specs-input" id="spec-other" placeholder="e.g. B650E Taichi" />
+      </div>
+    </div>
+
+    <button class="btn" onclick="connectToken()" style="width:100%;max-width:440px;padding:14px;">Connect →</button>
+
+    <div class="steps" style="margin-top:40px;">
       <div class="step">
         <div class="step-num">01 / HWINFO64</div>
         <div class="step-title">Enable CSV logging</div>
@@ -507,14 +557,14 @@
     <div class="hero-grid" id="hero-grid">
       <div class="hero-card" id="hero-cpu-temp" style="--hc:#4fffb0">
         <div class="hero-glow"></div>
-        <div class="hero-label">CPU Temp — Ryzen 9 9800X3D</div>
+        <div class="hero-label">CPU Temp — <span id="lbl-cpu">—</span></div>
         <div><span class="hero-value" id="hv-cpu-temp">—</span><span class="hero-unit">°C</span></div>
         <div class="hero-sub" id="hs-cpu-temp">waiting...</div>
         <div class="hero-bar-wrap"><div class="hero-bar" id="hb-cpu-temp" style="width:0%"></div></div>
       </div>
       <div class="hero-card" id="hero-gpu-temp" style="--hc:#00c8ff">
         <div class="hero-glow"></div>
-        <div class="hero-label">GPU Temp — RX 9070 XT</div>
+        <div class="hero-label">GPU Temp — <span id="lbl-gpu">—</span></div>
         <div><span class="hero-value" id="hv-gpu-temp">—</span><span class="hero-unit">°C</span></div>
         <div class="hero-sub" id="hs-gpu-temp">waiting...</div>
         <div class="hero-bar-wrap"><div class="hero-bar" id="hb-gpu-temp" style="width:0%"></div></div>
@@ -533,7 +583,7 @@
       </div>
       <div class="hero-card" id="hero-ram" style="--hc:#b57fff">
         <div class="hero-glow"></div>
-        <div class="hero-label">RAM Load</div>
+        <div class="hero-label">RAM Load — <span id="lbl-ram">—</span></div>
         <div><span class="hero-value" id="hv-ram">—</span><span class="hero-unit">%</span></div>
         <div class="hero-sub" id="hs-ram">waiting...</div>
         <div class="hero-bar-wrap"><div class="hero-bar" id="hb-ram" style="width:0%"></div></div>
@@ -572,12 +622,44 @@ const CATEGORIES = [
   { key: 'other',   label: 'Other',   color: '#888899' },
 ];
 
-// ── TOKEN FROM URL ────────────────────────────────────────────────────────────
+// ── SPECS ─────────────────────────────────────────────────────────────────────
+let specs = { cpu: '', gpu: '', ram: '', other: '' };
+
+function loadSpecs(token) {
+  try {
+    const saved = JSON.parse(sessionStorage.getItem('specs_' + token) || '{}');
+    specs = { cpu: saved.cpu||'', gpu: saved.gpu||'', ram: saved.ram||'', other: saved.other||'' };
+  } catch {}
+  applySpecLabels();
+}
+
+function saveSpecs(token) {
+  specs = {
+    cpu:   document.getElementById('spec-cpu')?.value.trim()   || '',
+    gpu:   document.getElementById('spec-gpu')?.value.trim()   || '',
+    ram:   document.getElementById('spec-ram')?.value.trim()   || '',
+    other: document.getElementById('spec-other')?.value.trim() || '',
+  };
+  try { sessionStorage.setItem('specs_' + token, JSON.stringify(specs)); } catch {}
+  applySpecLabels();
+}
+
+function applySpecLabels() {
+  const cpu = document.getElementById('lbl-cpu');
+  const gpu = document.getElementById('lbl-gpu');
+  const ram = document.getElementById('lbl-ram');
+  if (cpu) cpu.textContent = specs.cpu || '—';
+  if (gpu) gpu.textContent = specs.gpu || '—';
+  if (ram) ram.textContent = specs.ram || '—';
+}
+
+
 window.addEventListener('load', () => {
   const path = window.location.pathname;
   const m = path.match(/\/dashboard\/([^/]+)/);
   if (m) {
     document.getElementById('token-input').value = m[1];
+    loadSpecs(m[1]);
     connectToken();
   }
   updateCmdPreview();
@@ -599,6 +681,7 @@ function connectToken() {
   const token = document.getElementById('token-input').value.trim();
   if (!token) { showToast('Enter a token first'); return; }
 
+  saveSpecs(token);
   currentToken = token;
   document.getElementById('active-token').textContent = token;
   window.history.replaceState({}, '', `/dashboard/${token}`);
